@@ -445,7 +445,7 @@ class ToepNufft(torch.nn.Module):
         if len(kernel.shape) > len(image.shape[2:]):
             # run with batching for kernel
             if smaps.shape[0] == 1:
-                for mini_image, mini_kernel in zip(image, kernel):
+                for (mini_image, mini_kernel) in zip(image, kernel):
                     mini_image = mini_image.unsqueeze(0) * smaps
                     mini_image = tkbnF.fft_filter(
                         image=mini_image, kernel=mini_kernel, norm=norm
@@ -457,7 +457,7 @@ class ToepNufft(torch.nn.Module):
                     )
                     output.append(mini_image.squeeze(0))
             else:
-                for mini_image, smap, mini_kernel in zip(image, smaps, kernel):
+                for (mini_image, smap, mini_kernel) in zip(image, smaps, kernel):
                     mini_image = mini_image.unsqueeze(0) * smap.unsqueeze(0)
                     mini_image = tkbnF.fft_filter(
                         image=mini_image, kernel=mini_kernel, norm=norm
@@ -469,7 +469,7 @@ class ToepNufft(torch.nn.Module):
                     )
                     output.append(mini_image.squeeze(0))
         else:
-            for mini_image, smap in zip(image, smaps):
+            for (mini_image, smap) in zip(image, smaps):
                 mini_image = mini_image.unsqueeze(0) * smap.unsqueeze(0)
                 mini_image = tkbnF.fft_filter(
                     image=mini_image, kernel=kernel, norm=norm
@@ -482,6 +482,39 @@ class ToepNufft(torch.nn.Module):
                 output.append(mini_image.squeeze(0))
 
         return torch.stack(output)
+    
+    def toep_batch_loop_multi(
+        self, image: Tensor, smaps: Tensor, kernel: Tensor, norm: Optional[str]
+    ) -> Tensor:
+        output = []
+        if len(kernel.shape) > len(image.shape[2:]):
+            # run with batching for kernel
+            if smaps.shape[0] == 1:
+                for (mini_image, mini_kernel) in zip(image, kernel):
+                    mini_image = mini_image.unsqueeze(0) * smaps
+                    mini_image = tkbnF.fft_filter(
+                        image=mini_image, kernel=mini_kernel, norm=norm
+                    )
+                    
+                    output.append(mini_image.squeeze(0))
+            else:
+                for (mini_image, smap, mini_kernel) in zip(image, smaps, kernel):
+                    mini_image = mini_image.unsqueeze(0) * smap.unsqueeze(0)
+                    mini_image = tkbnF.fft_filter(
+                        image=mini_image, kernel=mini_kernel, norm=norm
+                    )
+                    
+                    output.append(mini_image.squeeze(0))
+        else:
+            for (mini_image, smap) in zip(image, smaps):
+                mini_image = mini_image.unsqueeze(0) * smap.unsqueeze(0)
+                mini_image = tkbnF.fft_filter(
+                    image=mini_image, kernel=kernel, norm=norm
+                )
+                
+                output.append(mini_image.squeeze(0))
+
+        return torch.stack(output)
 
     def forward(
         self,
@@ -489,6 +522,7 @@ class ToepNufft(torch.nn.Module):
         kernel: Tensor,
         smaps: Optional[Tensor] = None,
         norm: Optional[str] = None,
+        Is_multi: Optional[bool] = False,
     ) -> Tensor:
         """Toeplitz NUFFT forward function.
 
@@ -537,9 +571,14 @@ class ToepNufft(torch.nn.Module):
         if smaps is None:
             output = tkbnF.fft_filter(image=image, kernel=kernel, norm=norm)
         else:
-            output = self.toep_batch_loop(
-                image=image, smaps=smaps, kernel=kernel, norm=norm
-            )
+            if Is_multi:
+                output = self.toep_batch_loop_multi(
+                    image=image, smaps=smaps, kernel=kernel, norm=norm
+                )
+            else:
+                output = self.toep_batch_loop(
+                    image=image, smaps=smaps, kernel=kernel, norm=norm
+                )
 
         if not is_complex:
             output = torch.view_as_real(output)
